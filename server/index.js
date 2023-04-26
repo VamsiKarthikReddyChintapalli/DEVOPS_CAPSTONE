@@ -2,21 +2,20 @@ require('dotenv').config()
 const mongoose = require('mongoose');
 const cloudinary = require('cloudinary').v2;
 const express = require('express');
-const Movie = require('./Models/Movie')
+const Movie = require('./Models/Movie');
 const multer = require('multer');
 const cors = require('cors')
+const AWS = require('aws-sdk');
+const fs = require('fs');
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+});
 
-
-mongoose.connect('mongodb://localhost/movies-db', { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect('mongodb+srv://ec2-user:ec2-user@cluster0.ietwddu.mongodb.net/api', { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('Connected to MongoDB...'))
   .catch(err => console.error('Could not connect to MongoDB...', err));
 
-
-cloudinary.config({
-  cloud_name: 'dec6gy3wy',
-  api_key: '355514238263871',
-  api_secret: 'fkxhW0wjFM1XciQrJGl6kZk-Qn0'
-});
 
 
 const app = express();
@@ -41,12 +40,20 @@ const upload = multer({ storage });
 // routes
 app.post('/api/movies', upload.single('poster'), async (req, res) => {
   try {
-    const result = await cloudinary.uploader.upload(req.file.path);
+    const fileContent = fs.readFileSync(req.file.path);
+    const params = {
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Key: `${Date.now()}-${req.file.originalname}`,
+      Body: fileContent,
+      ContentType: req.file.mimetype,
+      ACL: 'public-read',
+    };
+    const s3Data = await s3.upload(params).promise();
     const movie = new Movie({
       title: req.body.title,
       director: req.body.director,
       releaseYear: req.body.releaseYear,
-      poster: result.secure_url
+      poster: s3Data.Location,
     });
     await movie.save(); 
     res.send(movie);
